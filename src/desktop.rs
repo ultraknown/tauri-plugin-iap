@@ -73,4 +73,10 @@ impl<R: Runtime> Iap<R> {
             "IAP is not supported on this platform",
         )))
     }
+
+    pub async fn present_offer_code_redeem_sheet(&self) -> crate::Result<()> {
+        Err(crate::Error::from(std::io::Error::other(
+            "IAP is not supported on this platform",
+        )))
+    }
 }

@@ -1,4 +1,5 @@
 import StoreKit
+import AppKit
 
 extension FFIResult: Error {}
 
@@ -152,7 +153,21 @@ class IapPlugin {
             throw FFIResult.Err(RustString("Purchase cancelled by user"))
 
         case .pending:
-            throw FFIResult.Err(RustString("Purchase is pending"))
+            // .pending 是正常状态（Ask to Buy、Family Sharing），返回 pending 购买对象
+            let pendingPurchase: JsonObject = [
+                "orderId": "",
+                "productId": product.id,
+                "purchaseState": PurchaseStateValue.pending.rawValue,
+                "purchaseTime": Int(Date().timeIntervalSince1970 * 1000),
+                "isAutoRenewing": false,
+                "isAcknowledged": false,
+                "originalJson": "",
+                "signature": "",
+                "purchaseToken": "",
+                "jwsRepresentation": "",
+                "packageName": Bundle.main.bundleIdentifier ?? "",
+            ]
+            return try serializeToJSON(pendingPurchase)
 
         @unknown default:
             throw FFIResult.Err(RustString("Unknown purchase result"))
@@ -284,6 +299,30 @@ class IapPlugin {
         }
 
         return try serializeToJSON(statusResult)
+    }
+
+    /// Presents the Offer Code redemption sheet (macOS 15+).
+    ///
+    /// The redeemed transaction arrives via the existing `Transaction.updates`
+    /// listener, so this only needs to present the sheet.
+    public func presentOfferCodeRedeemSheet() async throws(FFIResult) -> String {
+        guard #available(macOS 15.0, *) else {
+            throw FFIResult.Err(RustString("Offer code redemption requires macOS 15 or later"))
+        }
+
+        // 从主窗口的 contentViewController 获取 present 锚点
+        guard let viewController = NSApp.keyWindow?.contentViewController else {
+            throw FFIResult.Err(RustString("No key window available to present the offer code sheet"))
+        }
+
+        do {
+            try await AppStore.presentOfferCodeRedeemSheet(from: viewController)
+        } catch {
+            throw FFIResult.Err(
+                RustString("Failed to present offer code sheet: \(error.localizedDescription)"))
+        }
+
+        return try serializeToJSON([:])
     }
 
     // MARK: - Helper Functions
