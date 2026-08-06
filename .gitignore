@@ -16,4 +16,7 @@ node_modules/
 dist-js
 dist
 
+# swift-bridge generated bindings
+/macos/Sources/generated
+
 /coverage

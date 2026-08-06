@@ -1,4 +1,5 @@
 import StoreKit
+import AppKit
 
 extension FFIResult: Error {}
 
@@ -67,7 +68,7 @@ class IapPlugin {
                                 [
                                     "formattedPrice": introOffer.displayPrice,
                                     "priceCurrencyCode": getCurrencyCode(for: product),
-                                    "priceAmountMicros": 0,  // Not available in StoreKit 2
+                                    "priceAmountMicros": priceAmountMicros(introOffer.price),
                                     "billingPeriod": formatSubscriptionPeriod(introOffer.period),
                                     "billingCycleCount": introOffer.periodCount,
                                     "recurrenceMode": 0,
@@ -86,7 +87,7 @@ class IapPlugin {
                             [
                                 "formattedPrice": product.displayPrice,
                                 "priceCurrencyCode": getCurrencyCode(for: product),
-                                "priceAmountMicros": 0,
+                                "priceAmountMicros": priceAmountMicros(product.price),
                                 "billingPeriod": formatSubscriptionPeriod(
                                     subscription.subscriptionPeriod),
                                 "billingCycleCount": 0,
@@ -100,7 +101,7 @@ class IapPlugin {
                 }
             } else {
                 // One-time purchase
-                productDict["priceAmountMicros"] = 0  // Not available in StoreKit 2
+                productDict["priceAmountMicros"] = priceAmountMicros(product.price)
             }
 
             productsArray.append(productDict)
@@ -152,7 +153,21 @@ class IapPlugin {
             throw FFIResult.Err(RustString("Purchase cancelled by user"))
 
         case .pending:
-            throw FFIResult.Err(RustString("Purchase is pending"))
+            // .pending 是正常状态（Ask to Buy、Family Sharing），返回 pending 购买对象
+            let pendingPurchase: JsonObject = [
+                "orderId": "",
+                "productId": product.id,
+                "purchaseState": PurchaseStateValue.pending.rawValue,
+                "purchaseTime": Int(Date().timeIntervalSince1970 * 1000),
+                "isAutoRenewing": false,
+                "isAcknowledged": false,
+                "originalJson": "",
+                "signature": "",
+                "purchaseToken": "",
+                "jwsRepresentation": "",
+                "packageName": Bundle.main.bundleIdentifier ?? "",
+            ]
+            return try serializeToJSON(pendingPurchase)
 
         @unknown default:
             throw FFIResult.Err(RustString("Unknown purchase result"))
@@ -248,7 +263,15 @@ class IapPlugin {
                             if let statuses = try? await product.subscription?.status {
                                 for status in statuses {
                                     if status.state == .subscribed {
-                                        statusResult["isAutoRenewing"] = true
+                                        // `.subscribed` only means the subscription is still active;
+                                        // it does NOT imply auto-renew is on. A subscription that the
+                                        // user cancelled (but hasn't expired yet) is also `.subscribed`.
+                                        // The actual renewal intent lives in renewalInfo.willAutoRenew.
+                                        if case .verified(let renewalInfo) = status.renewalInfo {
+                                            statusResult["isAutoRenewing"] = renewalInfo.willAutoRenew
+                                        } else {
+                                            statusResult["isAutoRenewing"] = true
+                                        }
                                     } else if status.state == .expired {
                                         statusResult["isAutoRenewing"] = false
                                         statusResult["purchaseState"] =
@@ -276,6 +299,30 @@ class IapPlugin {
         }
 
         return try serializeToJSON(statusResult)
+    }
+
+    /// Presents the Offer Code redemption sheet (macOS 15+).
+    ///
+    /// The redeemed transaction arrives via the existing `Transaction.updates`
+    /// listener, so this only needs to present the sheet.
+    public func presentOfferCodeRedeemSheet() async throws(FFIResult) -> String {
+        guard #available(macOS 15.0, *) else {
+            throw FFIResult.Err(RustString("Offer code redemption requires macOS 15 or later"))
+        }
+
+        // 从主窗口的 contentViewController 获取 present 锚点
+        guard let viewController = NSApp.keyWindow?.contentViewController else {
+            throw FFIResult.Err(RustString("No key window available to present the offer code sheet"))
+        }
+
+        do {
+            try await AppStore.presentOfferCodeRedeemSheet(from: viewController)
+        } catch {
+            throw FFIResult.Err(
+                RustString("Failed to present offer code sheet: \(error.localizedDescription)"))
+        }
+
+        return try serializeToJSON([:])
     }
 
     // MARK: - Helper Functions
@@ -333,6 +380,10 @@ class IapPlugin {
         }
     }
 
+    private func priceAmountMicros(_ decimal: Decimal) -> Int64 {
+        return NSDecimalNumber(decimal: decimal * 1_000_000).int64Value
+    }
+
     private func createPurchaseObject(from verificationResult: VerificationResult<Transaction>, product: Product) async throws(FFIResult)
         -> JsonObject
     {
@@ -348,7 +399,13 @@ class IapPlugin {
             if let statuses = try? await product.subscription?.status {
                 for status in statuses {
                     if status.state == .subscribed {
-                        isAutoRenewing = true
+                        // `.subscribed` means the subscription is currently active, but a cancelled
+                        // (yet unexpired) subscription also has this state. Use willAutoRenew.
+                        if case .verified(let renewalInfo) = status.renewalInfo {
+                            isAutoRenewing = renewalInfo.willAutoRenew
+                        } else {
+                            isAutoRenewing = true
+                        }
                         break
                     }
                 }

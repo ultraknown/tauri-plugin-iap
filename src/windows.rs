@@ -694,6 +694,12 @@ impl<R: Runtime> Iap<R> {
             })
         }
     }
+
+    pub async fn present_offer_code_redeem_sheet(&self) -> crate::Result<()> {
+        Err(crate::Error::from(std::io::Error::other(
+            "Offer code redemption is only supported on macOS",
+        )))
+    }
 }
 
 #[cfg(test)]

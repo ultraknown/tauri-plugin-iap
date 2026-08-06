@@ -68,6 +68,7 @@ mod ffi {
             productId: String,
             productType: String,
         ) -> Result<String, FFIResult>;
+        async fn presentOfferCodeRedeemSheet(&self) -> Result<String, FFIResult>;
     }
 }
 
@@ -188,5 +189,21 @@ impl<R: Runtime> Iap<R> {
             .getProductStatus(product_id, product_type)
             .await
             .parse()
+    }
+
+    /// Presents the Offer Code redemption sheet (macOS 15+).
+    ///
+    /// Returns an empty JSON object `{}` on success. The resulting transaction
+    /// arrives via the existing `Transaction.updates` listener, so consumers
+    /// only need to observe the `purchaseUpdated` event.
+    pub async fn present_offer_code_redeem_sheet(&self) -> crate::Result<()> {
+        validation::require_bundle()?;
+
+        self.plugin
+            .presentOfferCodeRedeemSheet()
+            .await
+            .parse::<serde_json::Value>()?;
+
+        Ok(())
     }
 }

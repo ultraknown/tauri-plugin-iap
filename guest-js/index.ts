@@ -272,18 +272,18 @@ export async function purchase(
 /**
  * Restore user's previous purchases.
  *
- * @param productType - Type of products to restore: "subs" or "inapp"
+ * @param productType - Type of products to restore: "subs", "inapp", or "" for all
  * @returns Promise resolving to list of restored purchases
  * @example
  * ```typescript
- * const { purchases } = await restorePurchases('subs');
+ * const { purchases } = await restorePurchases('');
  * purchases.forEach(purchase => {
  *   console.log(`Restored: ${purchase.productId}`);
  * });
  * ```
  */
 export async function restorePurchases(
-  productType: "subs" | "inapp" = "subs",
+  productType: "subs" | "inapp" | "" = "",
 ): Promise<RestorePurchasesResponse> {
   return await invoke<RestorePurchasesResponse>(
     "plugin:iap|restore_purchases",
@@ -425,4 +425,21 @@ export async function onPurchaseUpdated(
   callback: (purchase: Purchase) => void,
 ): Promise<PluginListener> {
   return await addPluginListener("iap", "purchaseUpdated", callback);
+}
+
+/**
+ * Present the Offer Code redemption sheet (macOS 15+ only).
+ *
+ * The redeemed transaction arrives via the `onPurchaseUpdated` listener,
+ * so this only needs to present the sheet to the user.
+ *
+ * @returns Promise resolving when the sheet has been presented
+ * @throws Rejects on macOS < 15 or if no key window is available
+ * @example
+ * ```typescript
+ * await presentOfferCodeRedeemSheet();
+ * ```
+ */
+export async function presentOfferCodeRedeemSheet(): Promise<void> {
+  await invoke("plugin:iap|present_offer_code_redeem_sheet");
 }

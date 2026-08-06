@@ -9,6 +9,7 @@ import {
   consumePurchase,
   getProductStatus,
   onPurchaseUpdated,
+  presentOfferCodeRedeemSheet,
   PurchaseState,
   type GetProductsResponse,
   type Purchase,
@@ -256,7 +257,7 @@ describe("IAP Plugin", () => {
       expect(result).toEqual(mockResponse);
     });
 
-    it("should default to subs product type", async () => {
+    it("should default to all product types", async () => {
       const mockResponse: RestorePurchasesResponse = { purchases: [] };
       vi.mocked(invoke).mockResolvedValue(mockResponse);
 
@@ -264,7 +265,7 @@ describe("IAP Plugin", () => {
 
       expect(invoke).toHaveBeenCalledWith("plugin:iap|restore_purchases", {
         payload: {
-          productType: "subs",
+          productType: "",
         },
       });
     });
@@ -276,6 +277,18 @@ describe("IAP Plugin", () => {
       const result = await restorePurchases("inapp");
 
       expect(result.purchases).toHaveLength(0);
+    });
+  });
+
+  describe("presentOfferCodeRedeemSheet", () => {
+    it("should invoke the offer code redeem sheet command", async () => {
+      vi.mocked(invoke).mockResolvedValue(undefined);
+
+      await presentOfferCodeRedeemSheet();
+
+      expect(invoke).toHaveBeenCalledWith(
+        "plugin:iap|present_offer_code_redeem_sheet",
+      );
     });
   });
 
