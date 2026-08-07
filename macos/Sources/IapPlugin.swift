@@ -310,10 +310,14 @@ class IapPlugin {
             throw FFIResult.Err(RustString("Offer code redemption requires macOS 15 or later"))
         }
 
-        // 从主窗口的 contentViewController 获取 present 锚点
-        guard let viewController = NSApp.keyWindow?.contentViewController else {
-            throw FFIResult.Err(RustString("No key window available to present the offer code sheet"))
+        // 从当前 key 窗口（或任意可用窗口）的 contentView 构造 NSViewController 作为 present 锚点
+        // Tauri/wry 窗口通过 setContentView 挂载 WKWebView，不设置 contentViewController，
+        // 因此不能依赖 keyWindow?.contentViewController，需用 contentView 包装。
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first else {
+            throw FFIResult.Err(RustString("No window available to present the offer code sheet"))
         }
+        let viewController = NSViewController()
+        viewController.view = window.contentView ?? NSView()
 
         do {
             try await AppStore.presentOfferCodeRedeemSheet(from: viewController)
